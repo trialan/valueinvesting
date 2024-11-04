@@ -15,90 +15,95 @@ def identify_td_buy_countdown(df):
     countdown_columns = {}
     current_countdown_num = 1
 
+    # Get all setup columns
+    setup_columns = [col for col in df.columns if col.startswith("TD_Buy_Setup_")]
+
     for i in range(len(df)):
-        if df["TD_Buy_Setup"][i] == 9:
-            countdown = 0
-            previous_countdown_close = None
-            start_index = i - 8
+        current_date = mdates.num2date(df["Date"][i]).strftime("%Y-%m-%d")
+        
+        # Check for 9's across all setup columns
+        for setup_column in setup_columns:
+            if df[setup_column][i] == 9:
+                print(f"\n===== New Setup Found at {current_date} in {setup_column} =====")
+                countdown = 0
+                previous_countdown_close = None
+                start_index = i - 8
 
-            # Verify setup sequence starts with 1
-            if start_index >= 0:  # Add boundary check
-                if df["TD_Buy_Setup"][start_index] == 1:
-                    countdown_started = False
-                    countdown_reached_13 = (
-                        False  # New flag to track if countdown reached 13
-                    )
-                    countdown_values = np.zeros(len(df))
+                # Verify setup sequence starts with 1
+                if start_index >= 0:  # Add boundary check
+                    if df[setup_column][start_index] == 1:
+                        print(f"Valid setup confirmed - starts with 1 at index {start_index}")
+                        countdown_started = False
+                        countdown_reached_13 = False
+                        countdown_values = np.zeros(len(df))
 
-                    for j, bar in enumerate(range(start_index, len(df))):
-                        if countdown <= 10:
-                            # Apply conditions 1-4
-                            if bar >= 2:
-                                condition1 = df["Close"][bar] <= df["Low"][bar - 2]
-                            else:
-                                condition1 = False
+                        for j, bar in enumerate(range(start_index, len(df))):
+                            bar_date = mdates.num2date(df["Date"][bar]).strftime("%Y-%m-%d")
+                            print(f"\nChecking bar at {bar_date} (countdown = {countdown})")
+                            
+                            if countdown < 10:
+                                # Apply conditions 1-4
+                                if bar >= 2:
+                                    condition1 = df["Close"][bar] <= df["Low"][bar - 2]
+                                else:
+                                    condition1 = False
 
-                            if bar >= 1:
-                                condition2 = df["Low"][bar] <= df["Low"][bar - 1]
-                                condition4 = df["Close"][bar] < df["Close"][bar - 1]
-                            else:
-                                condition2 = False
-                                condition4 = False
+                                if bar >= 1:
+                                    condition2 = df["Low"][bar] <= df["Low"][bar - 1]
+                                    condition4 = df["Close"][bar] < df["Close"][bar - 1]
+                                else:
+                                    condition2 = False
+                                    condition4 = False
 
-                            if previous_countdown_close is not None:
-                                condition3 = df["Close"][bar] < previous_countdown_close
-                            else:
-                                condition3 = True
+                                if previous_countdown_close is not None:
+                                    condition3 = df["Close"][bar] < previous_countdown_close
+                                else:
+                                    condition3 = True
 
-                            if condition1 and condition2 and condition3 and condition4:
-                                countdown += 1
-                                countdown_values[bar] = countdown
-                                current_date = mdates.num2date(
-                                    df["Date"][bar]
-                                ).strftime("%Y-%m-%d")
-                                print(
-                                    f" ***** incremented countdown to {countdown} at {current_date}"
-                                )
-                                previous_countdown_close = df["Close"][bar]
+                                print(f"Conditions for countdown <= 10:")
+                                print(f"  1. Close <= Low[bar-2]: {condition1}")
+                                print(f"  2. Low <= Low[bar-1]: {condition2}")
+                                print(f"  3. Close < prev_countdown_close: {condition3}")
+                                print(f"  4. Close < Close[bar-1]: {condition4}")
 
-                                # If this is the first increment (countdown == 1), create new column
-                                if countdown == 1:
-                                    countdown_started = True
-                                    column_name = (
-                                        f"TD_Buy_Countdown_{current_countdown_num}"
-                                    )
-                                    countdown_columns[column_name] = (
-                                        countdown_values.copy()
-                                    )
-                                    current_countdown_num += 1
-
-                        elif countdown > 10 and countdown < 13:
-                            if bar >= 1:
-                                condition5 = df["Close"][bar] < previous_countdown_close
-                                if condition5:
+                                if condition1 and condition2 and condition3 and condition4:
                                     countdown += 1
                                     countdown_values[bar] = countdown
-                                    current_date = mdates.num2date(
-                                        df["Date"][bar]
-                                    ).strftime("%Y-%m-%d")
-                                    print(
-                                        f" ***** incremented countdown to {countdown} at {current_date}"
-                                    )
+                                    print(f"  >>> Countdown incremented to {countdown}")
                                     previous_countdown_close = df["Close"][bar]
 
-                        if countdown == 13:
-                            countdown_reached_13 = (
-                                True  # Set flag when countdown reaches 13
-                            )
-                            break
+                                    if countdown == 1:
+                                        countdown_started = True
+                                        column_name = f"TD_Buy_Countdown_{current_countdown_num}"
+                                        countdown_columns[column_name] = countdown_values.copy()
+                                        print(f"  >>> New countdown series started: {column_name}")
+                                        current_countdown_num += 1
 
-                    # Only add the countdown values if the countdown started AND reached 13
-                    if countdown_started and countdown_reached_13:
-                        column_name = f"TD_Buy_Countdown_{current_countdown_num - 1}"
-                        countdown_columns[column_name] = countdown_values
-                    else:
-                        # If countdown didn't reach 13, decrement the counter since we won't use this number
-                        current_countdown_num -= 1
+                            elif countdown >= 10 and countdown < 13:
+                                if bar >= 1:
+                                    condition5 = df["Close"][bar] < previous_countdown_close
+                                    print(f"Condition for countdown > 10:")
+                                    print(f"  5. Close < prev_countdown_close: {condition5}")
+                                    
+                                    if condition5:
+                                        countdown += 1
+                                        countdown_values[bar] = countdown
+                                        print(f"  >>> Countdown incremented to {countdown}")
+                                        previous_countdown_close = df["Close"][bar]
+
+                            if countdown == 13:
+                                countdown_reached_13 = True
+                                print(f"  >>> Countdown completed at {bar_date}")
+                                break
+
+                        # Only add the countdown values if the countdown started AND reached 13
+                        if countdown_started and countdown_reached_13:
+                            column_name = f"TD_Buy_Countdown_{current_countdown_num - 1}"
+                            countdown_columns[column_name] = countdown_values
+                            print(f"\nCountdown series {column_name} completed successfully")
+                        else:
+                            current_countdown_num -= 1
+                            print(f"\nCountdown series failed - did not reach 13 (stopped at {countdown})")
 
     # Add all countdown columns to the DataFrame
     for column_name, values in countdown_columns.items():
@@ -107,9 +112,10 @@ def identify_td_buy_countdown(df):
     return df
 
 
+
 def plot_data(df, title):
     fig, ax = plt.subplots(figsize=(15, 7))
-
+    
     # Plot high-low lines with open-close ticks
     for idx, row in df.iterrows():
         # High-Low line
@@ -133,158 +139,132 @@ def plot_data(df, title):
             color="black",
             linewidth=1,
         )
-
+    
     # Format x-axis dates
     ax.xaxis.set_major_locator(AutoDateLocator())
     ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
     plt.xticks(rotation=45)
+    
+    # Calculate y-axis scale for relative offsets
+    y_range = df["High"].max() - df["Low"].min()
+    text_offset = y_range * 0.02  # 2% of total price range for vertical spacing
 
-    # Plot TD Buy Setup numbers
-    for idx, row in df.iterrows():
-        if pd.notna(row["TD_Buy_Setup"]) and row["TD_Buy_Setup"] > 0:
-            ax.text(
-                row["Date"],
-                row["High"] + 0.5,
-                int(row["TD_Buy_Setup"]),
-                color="green",
-                fontsize=12,
-                ha="center",
-            )
+    # Define distinct colors for countdown columns
+    countdown_colors = ['blue', 'red', 'orange', 'purple', 'brown', 'darkred']
+
+    # Plot TD Buy Setup numbers for all setup columns
+    setup_columns = [col for col in df.columns if col.startswith("TD_Buy_Setup_")]
+    for i, column in enumerate(setup_columns):
+        vertical_offset = text_offset * (i + 1)  # Multiply by column index for spacing
+        for idx, row in df.iterrows():
+            if pd.notna(row[column]) and row[column] > 0:
+                ax.text(
+                    row["Date"],
+                    row["High"] + vertical_offset,
+                    int(row[column]),
+                    color="green",
+                    fontsize=12,
+                    ha="center",
+                )
+        print(f"Relative offset for {column}: {vertical_offset:.2f} ({(vertical_offset/y_range)*100:.1f}% of price range)")
 
     # Plot TD Buy Countdown numbers for all countdown columns
-    countdown_columns = [
-        col for col in df.columns if col.startswith("TD_Buy_Countdown_")
-    ]
-    vertical_offset = 0.5  # Initial offset
-
-    for column in countdown_columns:
+    countdown_columns = [col for col in df.columns if col.startswith("TD_Buy_Countdown_")]
+    for i, column in enumerate(countdown_columns):
+        vertical_offset = text_offset * (i + 1)  # Multiply by column index for spacing
+        color = countdown_colors[i % len(countdown_colors)]  # Cycle through colors if more columns than colors
         for idx, row in df.iterrows():
             if pd.notna(row[column]) and row[column] > 0:
                 ax.text(
                     row["Date"],
                     row["Low"] - vertical_offset,
                     int(row[column]),
-                    color="purple",
+                    color=color,
                     fontsize=12,
                     ha="center",
                 )
-        vertical_offset += 15  # Increment offset for next countdown sequence
+        print(f"Relative offset for {column}: {vertical_offset:.2f} ({(vertical_offset/y_range)*100:.1f}% of price range)")
 
     # Set labels and title
     ax.set_xlabel("Date")
     ax.set_ylabel("Price")
     ax.set_title(title)
-
     plt.tight_layout()
     plt.show()
 
 
-def old_identify_td_buy_countdown(df):
+
+def identify_td_buy_setup(df):
     # Create a copy of the DataFrame to ensure we're not dealing with a view
     df = df.copy()
 
-    # Initialize countdown array
-    countdown_values = np.zeros(len(df))
+    # Dictionary to keep track of active setups and their column names
+    setup_columns = {}
+    current_setup_num = 1
 
-    for i in range(len(df)):
-        if df["TD_Buy_Setup"][i] == 9:
-            countdown = 0
-            previous_countdown_close = None
-            start_index = i - 8
-
-            # Verify setup sequence starts with 1
-            if start_index >= 0:  # Add boundary check
-                assert df["TD_Buy_Setup"][start_index] == 1
-
-                for j, bar in enumerate(range(start_index, len(df))):
-                    if countdown <= 10:
-                        # Apply conditions 1-4
-                        if bar >= 2:
-                            condition1 = df["Close"][bar] <= df["Low"][bar - 2]
-                        else:
-                            condition1 = False
-
-                        if bar >= 1:
-                            condition2 = df["Low"][bar] <= df["Low"][bar - 1]
-                            condition4 = df["Close"][bar] < df["Close"][bar - 1]
-                        else:
-                            condition2 = False
-                            condition4 = False
-
-                        if previous_countdown_close is not None:
-                            condition3 = df["Close"][bar] < previous_countdown_close
-                        else:
-                            condition3 = True
-
-                        if condition1 and condition2 and condition3 and condition4:
-                            countdown += 1
-                            countdown_values[bar] = countdown
-                            current_date = mdates.num2date(df["Date"][bar]).strftime(
-                                "%Y-%m-%d"
-                            )
-                            print(
-                                f" ***** incremented countdown to {countdown} at {current_date}"
-                            )
-                            previous_countdown_close = df["Close"][bar]
-
-                    elif countdown > 10 and countdown < 13:
-                        if bar >= 1:
-                            condition5 = df["Close"][bar] < previous_countdown_close
-                            if condition5:
-                                countdown += 1
-                                countdown_values[bar] = countdown
-                                current_date = mdates.num2date(
-                                    df["Date"][bar]
-                                ).strftime("%Y-%m-%d")
-                                print(
-                                    f" ***** incremented countdown to {countdown} at {current_date}"
-                                )
-                                previous_countdown_close = df["Close"][bar]
-
-                    if countdown == 13:
-                        break
-
-    # Assign the countdown values to the DataFrame column at the end
-    df["TD_Buy_Countdown"] = countdown_values
-
-    return df
-
-
-def identify_td_buy_setup(df):
     for i in range(4, len(df) - 4):
-        """
-        Buy setup:
-        1. Close[i] > Close[i - 4]
-        2. Close[i + 1] < Close[i + 1 - 4]
-        """
+        current_date = mdates.num2date(df["Date"][i]).strftime("%Y-%m-%d")
+        
+        # Prevent index out of bounds
         if i + 1 >= len(df):
-            break  # Prevent index out of bounds
+            break
 
-        # Bearish TD Price Flip
+        # Check for Bearish TD Price Flip
         bearish_price_flip = (
             df["Close"][i] > df["Close"][i - 4]
             and df["Close"][i + 1] < df["Close"][i + 1 - 4]
         )
 
         if bearish_price_flip:
-            """
-            Check for 9 consecutive bars where the close is less than
-            the close four bars before, starting from index i + 1.
-            """
+            print(f"\n===== New Price Flip Found at {current_date} =====")
             count = 0
+            setup_started = False
+            setup_reached_9 = False
+            setup_values = np.zeros(len(df))
+
+            # Check for 9 consecutive bars
             for bar in range(i + 1, len(df)):
+                bar_date = mdates.num2date(df["Date"][bar]).strftime("%Y-%m-%d")
+                print(f"\nChecking bar at {bar_date} (setup count = {count})")
+
                 if bar - 4 >= 0:
                     if df["Close"][bar] < df["Close"][bar - 4]:
                         count += 1
-                        df.loc[bar, "TD_Buy_Setup"] = count
+                        setup_values[bar] = count
+                        print(f"  >>> Setup count incremented to {count}")
+
+                        if count == 1:
+                            setup_started = True
+                            column_name = f"TD_Buy_Setup_{current_setup_num}"
+                            setup_columns[column_name] = setup_values.copy()
+                            print(f"  >>> New setup series started: {column_name}")
+                            current_setup_num += 1
+
                         if count == 9:
+                            setup_reached_9 = True
+                            print(f"  >>> Setup completed at {bar_date}")
                             break
                     else:
-                        break  # Sequence interrupted
+                        print(f"  >>> Setup interrupted - Close not less than Close[4] ago")
+                        break
                 else:
-                    break  # Not enough data to compare
-    return df
+                    print(f"  >>> Not enough data to compare")
+                    break
 
+            # Only add the setup values if the setup started AND reached 9
+            if setup_started and setup_reached_9:
+                column_name = f"TD_Buy_Setup_{current_setup_num - 1}"
+                setup_columns[column_name] = setup_values
+                print(f"\nSetup series {column_name} completed successfully")
+            else:
+                current_setup_num -= 1
+                print(f"\nSetup series failed - did not reach 9 (stopped at {count})")
+
+    # Add all setup columns to the DataFrame
+    for column_name, values in setup_columns.items():
+        df[column_name] = values
+
+    return df
 
 def get_ohlc_for_date(df, target_date):
     target_date_num = mdates.date2num(datetime.strptime(target_date, "%Y-%m-%d"))
@@ -302,9 +282,9 @@ def get_ohlc_for_date(df, target_date):
 
 
 if __name__ == "__main__":
-    ticker = "^GSPC"
-    start_date = "2023-07-15"
-    end_date = "2023-11-01"
+    ticker = "^HSI"
+    start_date = "2015-04-15"
+    end_date = "2015-09-15"
     data = yf.download(ticker, start=start_date, end=end_date)
     data.reset_index(inplace=True)
     data["Date"] = data["Date"].map(mdates.date2num)
