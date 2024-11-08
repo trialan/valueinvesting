@@ -184,8 +184,8 @@ def identify_td_buy_setup(df):
             setup_reached_9 = False
             setup_values = np.zeros(len(df))
 
-            # Check for 9 consecutive bars
-            for bar in range(i + 1, len(df)):
+            # Start counting from the bar AFTER the flip is complete (i+2)
+            for bar in range(i + 2, len(df)):
                 bar_date = mdates.num2date(df["Date"][bar]).strftime("%Y-%m-%d")
 
                 if bar - 4 >= 0:
@@ -223,8 +223,8 @@ def identify_td_buy_setup(df):
 
 if __name__ == "__main__":
     ticker = "^HSI"
-    start_date = "2024-09-01"
-    end_date = "2024-11-08"
+    start_date = "2023-07-01"
+    end_date = "2023-09-08"
     data = yf_retry_download(ticker, start_date, end_date)
     data.reset_index(inplace=True)
     data["Date"] = data["Date"].map(mdates.date2num)
